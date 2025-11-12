@@ -1,0 +1,145 @@
+services:
+  traefik:
+    image: traefik
+    restart: always
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.mytlschallenge.acme.tlschallenge=true"
+      - "--certificatesresolvers.mytlschallenge.acme.email=${SSL_EMAIL}"
+      - "--certificatesresolvers.mytlschallenge.acme.storage=/letsencrypt/acme.json"
+    ports:
+      - "443:443"
+    volumes:
+      - traefik:/letsencrypt
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+  db:
+    image: postgres:17
+    restart: always
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASS}
+      - POSTGRES_DB=${N8N_DB}
+    volumes:
+      - db:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7
+    restart: always
+
+  n8n:
+    image: docker.n8n.io/n8nio/n8n
+    depends_on:
+      - db
+      - redis
+    restart: always
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.n8n.rule=Host(`n8n.${BASE_DOMAIN}`)
+      - traefik.http.routers.n8n.tls=true
+      - traefik.http.routers.n8n.entrypoints=web,websecure
+      - traefik.http.services.n8n.loadbalancer.server.port=5678
+      - traefik.http.routers.n8n.tls.certresolver=mytlschallenge
+      - traefik.http.middlewares.n8n.headers.SSLRedirect=true
+      - traefik.http.middlewares.n8n.headers.STSSeconds=315360000
+      - traefik.http.middlewares.n8n.headers.browserXSSFilter=true
+      - traefik.http.middlewares.n8n.headers.contentTypeNosniff=true
+      - traefik.http.middlewares.n8n.headers.forceSTSHeader=true
+      - traefik.http.middlewares.n8n.headers.SSLHost=${BASE_DOMAIN}
+      - traefik.http.middlewares.n8n.headers.STSIncludeSubdomains=true
+      - traefik.http.middlewares.n8n.headers.STSPreload=true
+      - traefik.http.routers.n8n.middlewares=n8n@docker
+    environment:
+      - N8N_HOST=n8n.${BASE_DOMAIN}
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=https
+      - NODE_ENV=production
+      - WEBHOOK_URL=https://n8n.${BASE_DOMAIN}/
+      - GENERIC_TIMEZONE=${TIMEZONE}
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_DATABASE=${N8N_DB}
+      - DB_POSTGRESDB_HOST=db
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_USER=${POSTGRES_USER}
+      - DB_POSTGRESDB_SCHEMA=public
+      - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASS}
+    volumes:
+      - n8n:/home/node/.n8n
+      - ./docker/n8n/files:/files
+
+  evolution:
+    image: evoapicloud/evolution-api:latest
+    restart: always
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.evolution.rule=Host(`evolution.${BASE_DOMAIN}`)
+      - traefik.http.routers.evolution.tls=true
+      - traefik.http.routers.evolution.entrypoints=web,websecure
+      - traefik.http.routers.evolution.tls.certresolver=mytlschallenge
+      - traefik.http.services.evolution.loadbalancer.server.port=8080
+      - traefik.http.middlewares.evolution.headers.SSLRedirect=true
+      - traefik.http.middlewares.evolution.headers.STSSeconds=315360000
+      - traefik.http.middlewares.evolution.headers.browserXSSFilter=true
+      - traefik.http.middlewares.evolution.headers.contentTypeNosniff=true
+      - traefik.http.middlewares.evolution.headers.forceSTSHeader=true
+      - traefik.http.middlewares.evolution.headers.STSIncludeSubdomains=true
+      - traefik.http.middlewares.evolution.headers.STSPreload=true
+      - traefik.http.routers.evolution.middlewares=evolution@docker
+    environment:
+      - AUTHENTICATION_API_KEY=${EVOLUTION_APIKEY}
+      - DATABASE_ENABLED=true
+      - DATABASE_PROVIDER=postgresql
+      - DATABASE_CONNECTION_URI=postgres://${POSTGRES_USER}:${POSTGRES_PASS}@db:5432/${EVOLUTION_DB}?schema=public
+      - DATABASE_CONNECTION_CLIENT_NAME=evolution_exchange
+      - DATABASE_SAVE_DATA_INSTANCE=true
+      - DATABASE_SAVE_DATA_NEW_MESSAGE=true
+      - DATABASE_SAVE_MESSAGE_UPDATE=true
+      - DATABASE_SAVE_DATA_CONTACTS=true
+      - DATABASE_SAVE_DATA_CHATS=true
+      - DATABASE_SAVE_DATA_LABELS=true
+      - DATABASE_SAVE_DATA_HISTORIC=true
+      - CACHE_REDIS_ENABLED=true
+      - CACHE_REDIS_URI=redis://redis:6379/6
+      - CACHE_REDIS_PREFIX_KEY=evolution
+      - CACHE_REDIS_SAVE_INSTANCES=false
+      - CACHE_LOCAL_ENABLED=false
+      - CONFIG_SESSION_PHONE_VERSION=2.3000.1029624345
+    volumes:
+      - evolution:/evolution/instances
+  
+  vaultwarden:
+    image: vaultwarden/server:latest
+    restart: unless-stopped
+    volumes:
+      - ./docker/vaultwarden:/data
+    environment:
+      SIGNUPS_ALLOWED: "true"
+      DOMAIN: https://vaultwarden.${BASE_DOMAIN}
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.vaultwarden.rule=Host(`vaultwarden.${BASE_DOMAIN}`)
+      - traefik.http.routers.vaultwarden.tls=true
+      - traefik.http.routers.vaultwarden.entrypoints=web,websecure
+      - traefik.http.routers.vaultwarden.tls.certresolver=mytlschallenge
+      - traefik.http.services.vaultwarden.loadbalancer.server.port=80
+      - traefik.http.middlewares.vaultwarden.headers.SSLRedirect=true
+      - traefik.http.middlewares.vaultwarden.headers.STSSeconds=315360000
+      - traefik.http.middlewares.vaultwarden.headers.browserXSSFilter=true
+      - traefik.http.middlewares.vaultwarden.headers.contentTypeNosniff=true
+      - traefik.http.middlewares.vaultwarden.headers.forceSTSHeader=true
+      - traefik.http.middlewares.vaultwarden.headers.SSLHost=${BASE_DOMAIN}
+      - traefik.http.middlewares.vaultwarden.headers.STSIncludeSubdomains=true
+      - traefik.http.middlewares.vaultwarden.headers.STSPreload=true
+      - traefik.http.routers.vaultwarden.middlewares=vaultwarden@docker
+
+volumes:
+  traefik:
+  db:
+  n8n:
+  evolution:
