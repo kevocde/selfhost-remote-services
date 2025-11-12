@@ -138,43 +138,6 @@ services:
       - traefik.http.middlewares.vaultwarden.headers.STSPreload=true
       - traefik.http.routers.vaultwarden.middlewares=vaultwarden@docker
 
-  pihole:
-    container_name: pihole
-    image: pihole/pihole:latest
-    expose:
-      - "53"
-      - "67"
-      - "80"
-    ports:
-      - 53:53/tcp
-      - 53:53/udp
-      - 67:67/udp
-    environment:
-      TZ: ${TIMEZONE}
-      WEBPASSWORD: ${PIHOLE_PASS}
-    volumes:
-      - ./docker/pihole/etc-pihole:/etc/pihole/
-      - ./docker/pihole/etc-dnsmasq.d:/etc/dnsmasq.d/
-    cap_add:
-      - NET_ADMIN
-    restart: unless-stopped
-    labels:
-      - traefik.enable=true
-      - traefik.http.routers.pihole.rule=Host(`pihole.${BASE_DOMAIN}`)
-      - traefik.http.routers.pihole.tls=true
-      - traefik.http.routers.pihole.entrypoints=web,websecure
-      - traefik.http.routers.pihole.tls.certresolver=mytlschallenge
-      - traefik.http.services.pihole.loadbalancer.server.port=80
-      - traefik.http.middlewares.pihole.headers.SSLRedirect=true
-      - traefik.http.middlewares.pihole.headers.STSSeconds=315360000
-      - traefik.http.middlewares.pihole.headers.browserXSSFilter=true
-      - traefik.http.middlewares.pihole.headers.contentTypeNosniff=true
-      - traefik.http.middlewares.pihole.headers.forceSTSHeader=true
-      - traefik.http.middlewares.pihole.headers.SSLHost=${BASE_DOMAIN}
-      - traefik.http.middlewares.pihole.headers.STSIncludeSubdomains=true
-      - traefik.http.middlewares.pihole.headers.STSPreload=true
-      - traefik.http.routers.pihole.middlewares=pihole@docker
-
 volumes:
   traefik:
   db:
