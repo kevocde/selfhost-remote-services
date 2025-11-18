@@ -1,0 +1,3 @@
+[submodule "docker/pagent"]
+	path = docker/pagent
+	url = git@github.com:kevocde/portfolio-agent.git

@@ -178,6 +178,22 @@ services:
       - MYSQL_USER=${WORDPRESS_DB_USER}
       - MYSQL_PASSWORD=${WORDPRESS_DB_PASS}
       - MYSQL_DATABASE=${WORDPRESS_DB_NAME}
+
+  pagent:
+    build:
+      context: ./docker/pagent
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_URL=${PAGENT_API_URL}
+        - VITE_AGENT_NAME=${PAGENT_AGENT_NAME}
+        - MAX_MESSAGE_LENGTH=${PAGENT_MESSAGE_LENGTH}
+    restart: unless-stopped
+    depends_on:
+      - redis
+    ports:
+      - 8081:80
+    env_file:
+      - ./docker/pagent/.env
     
 volumes:
   traefik:
