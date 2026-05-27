@@ -1,3 +1,6 @@
 [submodule "docker/pagent"]
 	path = docker/pagent
 	url = git@github.com:kevocde/portfolio-agent.git
+[submodule "services/billuyo"]
+	path = services/billuyo
+	url = https://github.com/Polyrics-Labs-Inc/billuyo.git

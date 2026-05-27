@@ -112,7 +112,7 @@ services:
       - CONFIG_SESSION_PHONE_VERSION=2.3000.1029624345
     volumes:
       - evolution:/evolution/instances
-  
+
   vaultwarden:
     image: vaultwarden/server:latest
     restart: unless-stopped
@@ -208,8 +208,29 @@ services:
       - traefik.http.routers.pagent.middlewares=pagent@docker
     env_file:
       - ./docker/pagent/.env
-    
-    
+
+  billuyo:
+    build:
+      context: ./services/billuyo
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.billuyo.rule=Host(`billuyo.${BASE_DOMAIN}`)
+      - traefik.http.routers.billuyo.tls=true
+      - traefik.http.routers.billuyo.entrypoints=web,websecure
+      - traefik.http.routers.billuyo.tls.certresolver=mytlschallenge
+      - traefik.http.services.billuyo.loadbalancer.server.port=80
+      - traefik.http.middlewares.billuyo.headers.SSLRedirect=true
+      - traefik.http.middlewares.billuyo.headers.STSSeconds=315360000
+      - traefik.http.middlewares.billuyo.headers.browserXSSFilter=true
+      - traefik.http.middlewares.billuyo.headers.contentTypeNosniff=true
+      - traefik.http.middlewares.billuyo.headers.forceSTSHeader=true
+      - traefik.http.middlewares.billuyo.headers.SSLHost=${BASE_DOMAIN}
+      - traefik.http.middlewares.billuyo.headers.STSIncludeSubdomains=true
+      - traefik.http.middlewares.billuyo.headers.STSPreload=true
+      - traefik.http.routers.billuyo.middlewares=billuyo@docker
+
 volumes:
   traefik:
   db:
