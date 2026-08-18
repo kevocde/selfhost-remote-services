@@ -256,7 +256,7 @@ services:
       - traefik.http.middlewares.appflowy.headers.STSPreload=true
       - traefik.http.routers.appflowy.middlewares=appflowy@docker
 
-  appflowy_minio:
+  appflowyminio:
     restart: on-failure
     image: minio/minio
     env_file:
@@ -325,7 +325,7 @@ services:
       - APPFLOWY_GOTRUE_BASE_URL=http://gotrue:9999
       - APPFLOWY_S3_CREATE_BUCKET=true
       - APPFLOWY_S3_USE_MINIO=true
-      - APPFLOWY_S3_MINIO_URL=http://appflowy_minio:9000
+      - APPFLOWY_S3_MINIO_URL=http://appflowyminio:9000
       - APPFLOWY_S3_REGION=
       - APPFLOWY_ACCESS_CONTROL=true
       - APPFLOWY_DATABASE_MAX_CONNECTIONS=40
@@ -367,7 +367,7 @@ services:
       - APPFLOWY_WORKER_ENVIRONMENT=production
       - APPFLOWY_WORKER_IMPORT_TICK_INTERVAL=30
       - APPFLOWY_S3_USE_MINIO=true
-      - APPFLOWY_S3_MINIO_URL=http://appflowy_minio:9000
+      - APPFLOWY_S3_MINIO_URL=http://appflowyminio:9000
     depends_on:
       appflowy_postgres:
         condition: service_healthy
@@ -390,7 +390,7 @@ services:
       - APPFLOWY_KEYWORD_INDEX_MAP_SIZE_BYTES=2147483648
       - APPFLOWY_KEYWORD_INDEX_DIR=/var/lib/appflowy/keyword_index
       - APPFLOWY_S3_USE_MINIO=true
-      - APPFLOWY_S3_MINIO_URL=http://appflowy_minio:9000
+      - APPFLOWY_S3_MINIO_URL=http://appflowyminio:9000
     volumes:
       - appflowy_keyword_index_data:/var/lib/appflowy/keyword_index
     healthcheck:
