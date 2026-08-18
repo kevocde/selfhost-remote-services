@@ -53,8 +53,9 @@ services:
       - ./docker/mailserver/docker-data/dms/mail-logs/:/var/log/mail/
       - ./docker/mailserver/docker-data/dms/config/:/tmp/docker-mailserver/
       - /etc/localtime:/etc/localtime:ro
-      # Traefik ACME store -> TLS cert for SMTP (docker-mailserver reads acme.json natively).
-      - traefik:/etc/letsencrypt:ro
+      # Traefik ACME store -> TLS cert for SMTP (docker-mailserver reads acme.json natively
+      # and writes extracted PEMs to /etc/letsencrypt/live/, so the mount must be writable).
+      - traefik:/etc/letsencrypt
     restart: always
     stop_grace_period: 1m
     cap_add:
