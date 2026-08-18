@@ -231,50 +231,203 @@ services:
       - traefik.http.middlewares.billuyo.headers.STSPreload=true
       - traefik.http.routers.billuyo.middlewares=billuyo@docker
 
-  mariadb:
-    image: mariadb:10.6
-    restart: unless-stopped
-    command: --transaction-isolation=READ-COMMITTED --log-bin=binlog --binlog-format=ROW
+  # ================= AppFlowy Cloud =================
+  appflowy_nginx:
+    restart: on-failure
+    image: nginx
     volumes:
-      - mariadb:/var/lib/mysql
-    environment:
-      - MYSQL_ROOT_PASSWORD=${MYSQL_PASS}_frankmolina
-      - MYSQL_PASSWORD=${MYSQL_PASS}
-      - MYSQL_DATABASE=nextcloud
-      - MYSQL_USER=${MYSQL_USER}
-
-  nextcloud:
-    image: nextcloud
-    restart: always
-    ports:
-      - 8080:80
-    volumes:
-      - ${NEXTCLOUD_STORAGE}:/var/www/html
-    environment:
-      - MYSQL_PASSWORD=${MYSQL_PASS}
-      - MYSQL_DATABASE=nextcloud
-      - MYSQL_USER=${MYSQL_USER}
-      - MYSQL_HOST=mariadb
+      - ./docker/appflowy/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - appflowy_cloud
     labels:
       - traefik.enable=true
-      - traefik.http.routers.nextcloud.rule=Host(`cloud.${BASE_DOMAIN}`)
-      - traefik.http.routers.nextcloud.tls=true
-      - traefik.http.routers.nextcloud.entrypoints=web,websecure
-      - traefik.http.routers.nextcloud.tls.certresolver=mytlschallenge
-      - traefik.http.services.nextcloud.loadbalancer.server.port=80
-      - traefik.http.middlewares.nextcloud.headers.SSLRedirect=true
-      - traefik.http.middlewares.nextcloud.headers.STSSeconds=315360000
-      - traefik.http.middlewares.nextcloud.headers.browserXSSFilter=true
-      - traefik.http.middlewares.nextcloud.headers.contentTypeNosniff=true
-      - traefik.http.middlewares.nextcloud.headers.forceSTSHeader=true
-      - traefik.http.middlewares.nextcloud.headers.SSLHost=${BASE_DOMAIN}
-      - traefik.http.middlewares.nextcloud.headers.STSIncludeSubdomains=true
-      - traefik.http.middlewares.nextcloud.headers.STSPreload=true
-      - traefik.http.routers.nextcloud.middlewares=nextcloud@docker
-    
+      - traefik.http.routers.appflowy.rule=Host(`appflowy.${BASE_DOMAIN}`)
+      - traefik.http.routers.appflowy.tls=true
+      - traefik.http.routers.appflowy.entrypoints=web,websecure
+      - traefik.http.routers.appflowy.tls.certresolver=mytlschallenge
+      - traefik.http.services.appflowy.loadbalancer.server.port=80
+      - traefik.http.middlewares.appflowy.headers.SSLRedirect=true
+      - traefik.http.middlewares.appflowy.headers.STSSeconds=315360000
+      - traefik.http.middlewares.appflowy.headers.browserXSSFilter=true
+      - traefik.http.middlewares.appflowy.headers.contentTypeNosniff=true
+      - traefik.http.middlewares.appflowy.headers.forceSTSHeader=true
+      - traefik.http.middlewares.appflowy.headers.SSLHost=${BASE_DOMAIN}
+      - traefik.http.middlewares.appflowy.headers.STSIncludeSubdomains=true
+      - traefik.http.middlewares.appflowy.headers.STSPreload=true
+      - traefik.http.routers.appflowy.middlewares=appflowy@docker
+
+  appflowy_minio:
+    restart: on-failure
+    image: minio/minio
+    env_file:
+      - ./docker/appflowy/.env
+    environment:
+      - MINIO_BROWSER_REDIRECT_URL=https://appflowy.${BASE_DOMAIN}/minio
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    volumes:
+      - appflowy_minio_data:/data
+
+  appflowy_postgres:
+    restart: on-failure
+    image: pgvector/pgvector:pg16
+    env_file:
+      - ./docker/appflowy/.env
+    command: [ "postgres", "-c", "port=${POSTGRES_PORT:-5432}" ]
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB} -p $${POSTGRES_PORT}" ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    volumes:
+      - appflowy_postgres_data:/var/lib/postgresql/data
+
+  gotrue:
+    restart: on-failure
+    depends_on:
+      appflowy_postgres:
+        condition: service_healthy
+    healthcheck:
+      test: "curl --fail http://127.0.0.1:9999/health || exit 1"
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+    image: appflowyinc/gotrue:${GOTRUE_VERSION:-latest}
+    env_file:
+      - ./docker/appflowy/.env
+    environment:
+      - GOTRUE_SITE_URL=appflowy-flutter://
+      - GOTRUE_URI_ALLOW_LIST=**
+      - GOTRUE_DISABLE_SIGNUP=false
+      - GOTRUE_JWT_ADMIN_GROUP_NAME=supabase_admin
+      - GOTRUE_DB_DRIVER=postgres
+      - API_EXTERNAL_URL=https://appflowy.${BASE_DOMAIN}/gotrue
+      - PORT=9999
+      - GOTRUE_MAILER_AUTOCONFIRM=true
+      - GOTRUE_MAILER_URLPATHS_CONFIRMATION=/gotrue/verify
+      - GOTRUE_MAILER_URLPATHS_INVITE=/gotrue/verify
+      - GOTRUE_MAILER_URLPATHS_RECOVERY=/gotrue/verify
+      - GOTRUE_MAILER_URLPATHS_EMAIL_CHANGE=/gotrue/verify
+
+  appflowy_cloud:
+    restart: on-failure
+    image: appflowyinc/appflowy_cloud:${APPFLOWY_CLOUD_VERSION:-latest}
+    env_file:
+      - ./docker/appflowy/.env
+    environment:
+      - RUST_LOG=${RUST_LOG:-info}
+      - APPFLOWY_ENVIRONMENT=production
+      - APPFLOWY_GOTRUE_BASE_URL=http://gotrue:9999
+      - APPFLOWY_S3_CREATE_BUCKET=true
+      - APPFLOWY_S3_USE_MINIO=true
+      - APPFLOWY_S3_MINIO_URL=http://appflowy_minio:9000
+      - APPFLOWY_S3_REGION=
+      - APPFLOWY_ACCESS_CONTROL=true
+      - APPFLOWY_DATABASE_MAX_CONNECTIONS=40
+      - APPFLOWY_BASE_URL=https://appflowy.${BASE_DOMAIN}
+      - APPFLOWY_WEB_URL=https://appflowy.${BASE_DOMAIN}
+      - APPFLOWY_S3_PRESIGNED_URL_ENDPOINT=https://appflowy.${BASE_DOMAIN}/minio-api
+      - APPFLOWY_SEARCH_SERVICE_URL=http://appflowy_search:4002
+      - APPFLOWY_SEARCH_REQUEST_TIMEOUT_SECS=10
+      - AI_ENABLED=false
+    healthcheck:
+      test: "curl --fail http://127.0.0.1:8000/api/health || exit 1"
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    depends_on:
+      gotrue:
+        condition: service_healthy
+
+  admin_frontend:
+    restart: on-failure
+    image: appflowyinc/admin_frontend:${APPFLOWY_ADMIN_FRONTEND_VERSION:-latest}
+    environment:
+      - APPFLOWY_GOTRUE_BASE_URL=http://gotrue:9999
+      - APPFLOWY_BASE_URL=http://appflowy_cloud:8000
+    depends_on:
+      gotrue:
+        condition: service_healthy
+      appflowy_cloud:
+        condition: service_healthy
+
+  appflowy_worker:
+    restart: on-failure
+    image: appflowyinc/appflowy_worker:${APPFLOWY_WORKER_VERSION:-latest}
+    env_file:
+      - ./docker/appflowy/.env
+    environment:
+      - RUST_LOG=${RUST_LOG:-info}
+      - APPFLOWY_ENVIRONMENT=production
+      - APPFLOWY_WORKER_ENVIRONMENT=production
+      - APPFLOWY_WORKER_IMPORT_TICK_INTERVAL=30
+      - APPFLOWY_S3_USE_MINIO=true
+      - APPFLOWY_S3_MINIO_URL=http://appflowy_minio:9000
+    depends_on:
+      appflowy_postgres:
+        condition: service_healthy
+      appflowy_cloud:
+        condition: service_healthy
+
+  appflowy_search:
+    restart: on-failure
+    image: appflowyinc/appflowy_search:${APPFLOWY_SEARCH_VERSION:-latest}
+    env_file:
+      - ./docker/appflowy/.env
+    environment:
+      - RUST_LOG=${RUST_LOG:-info}
+      - APPFLOWY_SEARCH_HOST=[::]
+      - APPFLOWY_SEARCH_PORT=4002
+      - APPFLOWY_BACKGROUND_INDEXER_ENABLED=true
+      - APPFLOWY_INDEXER_DATABASE_ENABLED=false
+      - APPFLOWY_KEYWORD_SEARCH_ENABLED=true
+      - APPFLOWY_KEYWORD_WORKER_ENABLED=true
+      - APPFLOWY_KEYWORD_INDEX_MAP_SIZE_BYTES=2147483648
+      - APPFLOWY_KEYWORD_INDEX_DIR=/var/lib/appflowy/keyword_index
+      - APPFLOWY_S3_USE_MINIO=true
+      - APPFLOWY_S3_MINIO_URL=http://appflowy_minio:9000
+    volumes:
+      - appflowy_keyword_index_data:/var/lib/appflowy/keyword_index
+    healthcheck:
+      test:
+        - CMD
+        - bash
+        - -ec
+        - |
+          exec 3<>/dev/tcp/127.0.0.1/$${APPFLOWY_SEARCH_PORT:-4002}
+          printf 'GET /health HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3
+          read -r _ status _ <&3
+          [ "$$status" = 200 ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+    depends_on:
+      appflowy_postgres:
+        condition: service_healthy
+
+  appflowy_web:
+    restart: on-failure
+    image: appflowyinc/appflowy_web:${APPFLOWY_WEB_VERSION:-latest}
+    environment:
+      - APPFLOWY_BASE_URL=https://appflowy.${BASE_DOMAIN}
+      - APPFLOWY_GOTRUE_BASE_URL=https://appflowy.${BASE_DOMAIN}/gotrue
+      - APPFLOWY_WS_BASE_URL=wss://appflowy.${BASE_DOMAIN}/ws/v2
+    depends_on:
+      appflowy_cloud:
+        condition: service_healthy
+
 volumes:
   traefik:
   db:
   n8n:
   evolution:
   mariadb:
+  appflowy_postgres_data:
+  appflowy_minio_data:
+  appflowy_keyword_index_data:
