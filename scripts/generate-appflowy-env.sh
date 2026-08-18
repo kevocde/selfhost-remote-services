@@ -2,6 +2,7 @@
 #
 # Generates docker/appflowy/.env from docker/appflowy/.env-example with
 # freshly generated random secrets.
+# SMTP `CHANGE_ME` placeholders are filled using BASE_DOMAIN from the root .env.
 #
 # Usage:
 #   bash scripts/generate-appflowy-env.sh            # fails if .env already exists
@@ -16,6 +17,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 TEMPLATE="${PROJECT_DIR}/docker/appflowy/.env-example"
 TARGET="${PROJECT_DIR}/docker/appflowy/.env"
+ROOT_ENV="${PROJECT_DIR}/.env"
+
+# BASE_DOMAIN from the root .env is used to fill the SMTP `CHANGE_ME` placeholders.
+BASE_DOMAIN=""
+if [[ -f "${ROOT_ENV}" ]]; then
+  BASE_DOMAIN="$(sed -n 's/^BASE_DOMAIN=//p' "${ROOT_ENV}" | head -1 | tr -d '"' | xargs)"
+fi
 
 FORCE=0
 
@@ -60,24 +68,39 @@ JWT_SECRET="$(rand_hex 32)"          # 64 chars
 
 mkdir -p "$(dirname "${TARGET}")"
 
-sed \
-  -e "s|^POSTGRES_PASSWORD=CHANGE_ME$|POSTGRES_PASSWORD=${POSTGRES_PASSWORD}|" \
-  -e "s|postgres://postgres:CHANGE_ME@|postgres://postgres:${POSTGRES_PASSWORD}@|g" \
-  -e "s|^MINIO_ROOT_USER=CHANGE_ME$|MINIO_ROOT_USER=${MINIO_ACCESS_KEY}|" \
-  -e "s|^MINIO_ROOT_PASSWORD=CHANGE_ME$|MINIO_ROOT_PASSWORD=${MINIO_SECRET_KEY}|" \
-  -e "s|^APPFLOWY_S3_ACCESS_KEY=CHANGE_ME$|APPFLOWY_S3_ACCESS_KEY=${MINIO_ACCESS_KEY}|" \
-  -e "s|^APPFLOWY_S3_SECRET_KEY=CHANGE_ME$|APPFLOWY_S3_SECRET_KEY=${MINIO_SECRET_KEY}|" \
-  -e "s|^GOTRUE_ADMIN_PASSWORD=CHANGE_ME$|GOTRUE_ADMIN_PASSWORD=${ADMIN_PASSWORD}|" \
-  -e "s|^GOTRUE_JWT_SECRET=CHANGE_ME_LONG$|GOTRUE_JWT_SECRET=${JWT_SECRET}|" \
-  -e "s|^APPFLOWY_GOTRUE_JWT_SECRET=SAME_AS_GOTRUE_JWT_SECRET$|APPFLOWY_GOTRUE_JWT_SECRET=${JWT_SECRET}|" \
-  "${TEMPLATE}" > "${TARGET}"
+SED_ARGS=(
+  -e "s|^POSTGRES_PASSWORD=CHANGE_ME$|POSTGRES_PASSWORD=${POSTGRES_PASSWORD}|"
+  -e "s|postgres://postgres:CHANGE_ME@|postgres://postgres:${POSTGRES_PASSWORD}@|g"
+  -e "s|^MINIO_ROOT_USER=CHANGE_ME$|MINIO_ROOT_USER=${MINIO_ACCESS_KEY}|"
+  -e "s|^MINIO_ROOT_PASSWORD=CHANGE_ME$|MINIO_ROOT_PASSWORD=${MINIO_SECRET_KEY}|"
+  -e "s|^APPFLOWY_S3_ACCESS_KEY=CHANGE_ME$|APPFLOWY_S3_ACCESS_KEY=${MINIO_ACCESS_KEY}|"
+  -e "s|^APPFLOWY_S3_SECRET_KEY=CHANGE_ME$|APPFLOWY_S3_SECRET_KEY=${MINIO_SECRET_KEY}|"
+  -e "s|^GOTRUE_ADMIN_PASSWORD=CHANGE_ME$|GOTRUE_ADMIN_PASSWORD=${ADMIN_PASSWORD}|"
+  -e "s|^GOTRUE_JWT_SECRET=CHANGE_ME_LONG$|GOTRUE_JWT_SECRET=${JWT_SECRET}|"
+  -e "s|^APPFLOWY_GOTRUE_JWT_SECRET=SAME_AS_GOTRUE_JWT_SECRET$|APPFLOWY_GOTRUE_JWT_SECRET=${JWT_SECRET}|"
+)
+if [[ -n "${BASE_DOMAIN}" ]]; then
+  # Fill the SMTP domain placeholders (mail.CHANGE_ME / @CHANGE_ME) with BASE_DOMAIN.
+  SED_ARGS+=(
+    -e "s|@CHANGE_ME|@${BASE_DOMAIN}|g"
+    -e "s|mail\.CHANGE_ME|mail.${BASE_DOMAIN}|g"
+  )
+fi
+
+sed "${SED_ARGS[@]}" "${TEMPLATE}" > "${TARGET}"
 
 chmod 600 "${TARGET}"
 
-if grep -Eq 'CHANGE_ME|SAME_AS_GOTRUE_JWT_SECRET' "${TARGET}"; then
+if grep -Eq '^[^#]*CHANGE_ME|SAME_AS_GOTRUE_JWT_SECRET' "${TARGET}"; then
   echo "ERROR: some placeholders were not replaced in ${TARGET}" >&2
+  echo "       - Ensure BASE_DOMAIN is set in the root .env (fills the SMTP 'CHANGE_ME' domain)." >&2
   exit 1
 fi
 
+if grep -Eq 'FILL_ME' "${TARGET}"; then
+  echo "WARNING: SMTP password placeholder FILL_ME remains in ${TARGET}:"
+  echo "         replace it with the no-reply@<domain> password created via setup.sh."
+fi
+
 echo "Generated ${TARGET} with fresh secrets."
-echo "Review GOTRUE_ADMIN_EMAIL (and SMTP settings) in ${TARGET} if needed."
+echo "Review GOTRUE_ADMIN_EMAIL in ${TARGET} if needed."

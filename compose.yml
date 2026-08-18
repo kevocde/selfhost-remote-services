@@ -19,6 +19,47 @@ services:
       - traefik:/letsencrypt
       - /var/run/docker.sock:/var/run/docker.sock:ro
 
+  # Placeholder router ONLY to make Traefik issue a Let's Encrypt cert for
+  # mail.<BASE_DOMAIN> (docker-mailserver reads it from acme.json). No real
+  # traffic is expected here.
+  mailcert:
+    image: traefik/whoami
+    restart: always
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.mailcert.rule=Host(`mail.${BASE_DOMAIN}`)
+      - traefik.http.routers.mailcert.tls=true
+      - traefik.http.routers.mailcert.entrypoints=web,websecure
+      - traefik.http.routers.mailcert.tls.certresolver=mytlschallenge
+      - traefik.http.services.mailcert.loadbalancer.server.port=80
+
+  # docker-mailserver (SMTP relay for AppFlowy). Env config is tracked in docker/mailserver/mailserver.env.
+  mailserver:
+    image: ghcr.io/docker-mailserver/docker-mailserver:latest
+    container_name: mailserver
+    # NOTE: Replace `mail.${BASE_DOMAIN}` value via BASE_DOMAIN in .env once set.
+    hostname: mail.${BASE_DOMAIN}
+    env_file:
+      - ./docker/mailserver/mailserver.env
+    depends_on:
+      - traefik
+    ports:
+      - "25:25"    # SMTP  (explicit TLS => STARTTLS, Authentication is DISABLED => use port 465/587 instead)
+      - "465:465"  # ESMTP (implicit TLS)
+      - "587:587"  # ESMTP (explicit TLS => STARTTLS)
+    volumes:
+      - ./docker/mailserver/docker-data/dms/mail-data/:/var/mail/
+      - ./docker/mailserver/docker-data/dms/mail-state/:/var/mail-state/
+      - ./docker/mailserver/docker-data/dms/mail-logs/:/var/log/mail/
+      - ./docker/mailserver/docker-data/dms/config/:/tmp/docker-mailserver/
+      - /etc/localtime:/etc/localtime:ro
+      # Traefik ACME store -> TLS cert for SMTP (docker-mailserver reads acme.json natively).
+      - traefik:/etc/letsencrypt:ro
+    restart: always
+    stop_grace_period: 1m
+    cap_add:
+      - NET_ADMIN
+
   db:
     image: postgres:17
     restart: always
@@ -308,7 +349,7 @@ services:
       - GOTRUE_DB_DRIVER=postgres
       - API_EXTERNAL_URL=https://appflowy.${BASE_DOMAIN}/gotrue
       - PORT=9999
-      - GOTRUE_MAILER_AUTOCONFIRM=true
+      - GOTRUE_MAILER_AUTOCONFIRM=false
       - GOTRUE_MAILER_URLPATHS_CONFIRMATION=/gotrue/verify
       - GOTRUE_MAILER_URLPATHS_INVITE=/gotrue/verify
       - GOTRUE_MAILER_URLPATHS_RECOVERY=/gotrue/verify
@@ -424,6 +465,7 @@ services:
 
 volumes:
   traefik:
+    name: remote-services_traefik
   db:
   n8n:
   evolution:

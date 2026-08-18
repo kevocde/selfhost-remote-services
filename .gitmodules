@@ -4,3 +4,6 @@
 [submodule "services/billuyo"]
 	path = services/billuyo
 	url = https://github.com/Polyrics-Labs-Inc/billuyo.git
+[submodule "services/docker-mailserver"]
+	path = services/docker-mailserver
+	url = https://github.com/docker-mailserver/docker-mailserver.git

@@ -1,2 +1,4 @@
 .env
 !.*-example
+# docker-mailserver mail data / state
+docker/mailserver/docker-data/
