@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Generates docker/appflowy/.env from docker/appflowy/.env-example with
+# Generates services/appflowy/.env from services/appflowy/.env-example with
 # freshly generated random secrets.
 # SMTP `CHANGE_ME` placeholders are filled using BASE_DOMAIN from the root .env.
 #
@@ -15,8 +15,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-TEMPLATE="${PROJECT_DIR}/docker/appflowy/.env-example"
-TARGET="${PROJECT_DIR}/docker/appflowy/.env"
+TEMPLATE="${PROJECT_DIR}/services/appflowy/.env-example"
+TARGET="${PROJECT_DIR}/services/appflowy/.env"
 ROOT_ENV="${PROJECT_DIR}/.env"
 
 # BASE_DOMAIN from the root .env is used to fill the SMTP `CHANGE_ME` placeholders.

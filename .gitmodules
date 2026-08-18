@@ -1,5 +1,5 @@
-[submodule "docker/pagent"]
-	path = docker/pagent
+[submodule "services/pagent"]
+	path = services/pagent
 	url = git@github.com:kevocde/portfolio-agent.git
 [submodule "services/billuyo"]
 	path = services/billuyo

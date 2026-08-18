@@ -33,14 +33,14 @@ services:
       - traefik.http.routers.mailcert.tls.certresolver=mytlschallenge
       - traefik.http.services.mailcert.loadbalancer.server.port=80
 
-  # docker-mailserver (SMTP relay for AppFlowy). Env config is tracked in docker/mailserver/mailserver.env.
+  # docker-mailserver (SMTP relay for AppFlowy). Env config is tracked in services/mailserver-config/mailserver.env.
   mailserver:
     image: ghcr.io/docker-mailserver/docker-mailserver:latest
     container_name: mailserver
     # NOTE: Replace `mail.${BASE_DOMAIN}` value via BASE_DOMAIN in .env once set.
     hostname: mail.${BASE_DOMAIN}
     env_file:
-      - ./docker/mailserver/mailserver.env
+      - ./services/mailserver-config/mailserver.env
     depends_on:
       - traefik
     ports:
@@ -222,7 +222,7 @@ services:
 
   #pagent:
   #  build:
-  #    context: ./docker/pagent
+    #    context: ./services/pagent
   #    dockerfile: Dockerfile
   #    args:
   #      - VITE_API_URL=${PAGENT_API_URL}
@@ -248,7 +248,7 @@ services:
   #    - traefik.http.middlewares.pagent.headers.STSPreload=true
   #    - traefik.http.routers.pagent.middlewares=pagent@docker
   #  env_file:
-  #    - ./docker/pagent/.env
+    #    - ./services/pagent/.env
 
   billuyo:
     build:
@@ -277,7 +277,7 @@ services:
     restart: on-failure
     image: nginx
     volumes:
-      - ./docker/appflowy/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./services/appflowy/nginx.conf:/etc/nginx/nginx.conf:ro
     depends_on:
       - appflowy_cloud
     labels:
@@ -301,7 +301,7 @@ services:
     restart: on-failure
     image: minio/minio
     env_file:
-      - ./docker/appflowy/.env
+      - ./services/appflowy/.env
     environment:
       - MINIO_BROWSER_REDIRECT_URL=https://appflowy.${BASE_DOMAIN}/minio
     command: server /data --console-address ":9001"
@@ -317,7 +317,7 @@ services:
     restart: on-failure
     image: pgvector/pgvector:pg16
     env_file:
-      - ./docker/appflowy/.env
+      - ./services/appflowy/.env
     command: [ "postgres", "-c", "port=${POSTGRES_PORT:-5432}" ]
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB} -p $${POSTGRES_PORT}" ]
@@ -340,7 +340,7 @@ services:
       start_period: 40s
     image: appflowyinc/gotrue:${GOTRUE_VERSION:-latest}
     env_file:
-      - ./docker/appflowy/.env
+      - ./services/appflowy/.env
     environment:
       - GOTRUE_SITE_URL=appflowy-flutter://
       - GOTRUE_URI_ALLOW_LIST=**
@@ -359,7 +359,7 @@ services:
     restart: on-failure
     image: appflowyinc/appflowy_cloud:${APPFLOWY_CLOUD_VERSION:-latest}
     env_file:
-      - ./docker/appflowy/.env
+      - ./services/appflowy/.env
     environment:
       - RUST_LOG=${RUST_LOG:-info}
       - APPFLOWY_ENVIRONMENT=production
@@ -401,7 +401,7 @@ services:
     restart: on-failure
     image: appflowyinc/appflowy_worker:${APPFLOWY_WORKER_VERSION:-latest}
     env_file:
-      - ./docker/appflowy/.env
+      - ./services/appflowy/.env
     environment:
       - RUST_LOG=${RUST_LOG:-info}
       - APPFLOWY_ENVIRONMENT=production
@@ -419,7 +419,7 @@ services:
     restart: on-failure
     image: appflowyinc/appflowy_search:${APPFLOWY_SEARCH_VERSION:-latest}
     env_file:
-      - ./docker/appflowy/.env
+      - ./services/appflowy/.env
     environment:
       - RUST_LOG=${RUST_LOG:-info}
       - APPFLOWY_SEARCH_HOST=[::]
