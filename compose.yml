@@ -155,6 +155,37 @@ services:
     volumes:
       - evolution:/evolution/instances
 
+  bitwarden:
+    image: ghcr.io/bitwarden/lite
+    restart: unless-stopped
+    volumes:
+      - bitwarden:/etc/bitwarden
+    environment:
+      - BW_DB_PROVIDER=${BW_DB_PROVIDER}
+      - BW_DB_SERVER=${BW_DB_SERVER}
+      - BW_DB_DATABASE=${BW_DB_DATABASE}
+      - BW_DB_USERNAME=${BW_DB_USERNAME}
+      - BW_DB_PASSWORD=${BW_DB_PASSWORD}
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.bitwarden.rule=Host(`bitwarden.${BASE_DOMAIN}`)
+      - traefik.http.routers.bitwarden.tls=true
+      - traefik.http.routers.bitwarden.entrypoints=web,websecure
+      - traefik.http.routers.bitwarden.tls.certresolver=mytlschallenge
+      - traefik.http.services.bitwarden.loadbalancer.server.port=80
+      - traefik.http.middlewares.bitwarden.headers.SSLRedirect=true
+      - traefik.http.middlewares.bitwarden.headers.STSSeconds=315360000
+      - traefik.http.middlewares.bitwarden.headers.browserXSSFilter=true
+      - traefik.http.middlewares.bitwarden.headers.contentTypeNosniff=true
+      - traefik.http.middlewares.bitwarden.headers.forceSTSHeader=true
+      - traefik.http.middlewares.bitwarden.headers.SSLHost=${BASE_DOMAIN}
+      - traefik.http.middlewares.bitwarden.headers.STSIncludeSubdomains=true
+      - traefik.http.middlewares.bitwarden.headers.STSPreload=true
+      - traefik.http.routers.bitwarden.middlewares=bitwarden@docker
+    depends_on:
+      - mariadb
+      - traefik
+
   vaultwarden:
     image: vaultwarden/server:latest
     restart: unless-stopped
@@ -215,41 +246,12 @@ services:
     restart: unless-stopped
     volumes:
       - mariadb:/var/lib/mysql
+      - ./services/mysql:/docker-entrypoint-initdb.d
     environment:
       - MYSQL_ROOT_PASSWORD=${WORDPRESS_DB_PASS}
       - MYSQL_USER=${WORDPRESS_DB_USER}
       - MYSQL_PASSWORD=${WORDPRESS_DB_PASS}
       - MYSQL_DATABASE=${WORDPRESS_DB_NAME}
-
-  #pagent:
-  #  build:
-    #    context: ./services/pagent
-  #    dockerfile: Dockerfile
-  #    args:
-  #      - VITE_API_URL=${PAGENT_API_URL}
-  #      - VITE_AGENT_NAME=${PAGENT_AGENT_NAME}
-  #      - MAX_MESSAGE_LENGTH=${PAGENT_MESSAGE_LENGTH}
-  #  restart: unless-stopped
-  #  depends_on:
-  #    - redis
-  #  labels:
-  #    - traefik.enable=true
-  #    - traefik.http.routers.pagent.rule=Host(`pagent.${BASE_DOMAIN}`)
-  #    - traefik.http.routers.pagent.tls=true
-  #    - traefik.http.routers.pagent.entrypoints=web,websecure
-  #    - traefik.http.routers.pagent.tls.certresolver=mytlschallenge
-  #    - traefik.http.services.pagent.loadbalancer.server.port=80
-  #    - traefik.http.middlewares.pagent.headers.SSLRedirect=true
-  #    - traefik.http.middlewares.pagent.headers.STSSeconds=315360000
-  #    - traefik.http.middlewares.pagent.headers.browserXSSFilter=true
-  #    - traefik.http.middlewares.pagent.headers.contentTypeNosniff=true
-  #    - traefik.http.middlewares.pagent.headers.forceSTSHeader=true
-  #    - traefik.http.middlewares.pagent.headers.SSLHost=${BASE_DOMAIN}
-  #    - traefik.http.middlewares.pagent.headers.STSIncludeSubdomains=true
-  #    - traefik.http.middlewares.pagent.headers.STSPreload=true
-  #    - traefik.http.routers.pagent.middlewares=pagent@docker
-  #  env_file:
-    #    - ./services/pagent/.env
 
   billuyo:
     build:
@@ -273,7 +275,6 @@ services:
       - traefik.http.middlewares.billuyo.headers.STSPreload=true
       - traefik.http.routers.billuyo.middlewares=billuyo@docker
 
-  # ================= AppFlowy Cloud =================
   appflowy_nginx:
     restart: on-failure
     image: nginx
@@ -471,6 +472,7 @@ volumes:
   n8n:
   evolution:
   mariadb:
+  bitwarden:
   appflowy_postgres_data:
   appflowy_minio_data:
   appflowy_keyword_index_data:
