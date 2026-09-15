@@ -175,7 +175,7 @@ services:
       - traefik.http.routers.bitwarden.tls=true
       - traefik.http.routers.bitwarden.entrypoints=web,websecure
       - traefik.http.routers.bitwarden.tls.certresolver=mytlschallenge
-      - traefik.http.services.bitwarden.loadbalancer.server.port=80
+      - traefik.http.services.bitwarden.loadbalancer.server.port=8080
       - traefik.http.middlewares.bitwarden.headers.SSLRedirect=true
       - traefik.http.middlewares.bitwarden.headers.STSSeconds=315360000
       - traefik.http.middlewares.bitwarden.headers.browserXSSFilter=true
