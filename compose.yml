@@ -169,7 +169,7 @@ services:
       - BW_DOMAIN=${BW_DOMAIN}
       - BW_INSTALLATION_ID=${BW_INSTALLATION_ID}
       - BW_INSTALLATION_KEY=${BW_INSTALLATION_KEY}
-      - globalSettings__mail__replyToEmail=no-reply.bitwarden@polyrics.dev
+      - globalSettings__mail__replyToEmail=no-reply.bitwardencat@polyrics.dev
       - globalSettings__mail__smtp__host=mailserver
       - globalSettings__mail__smtp__port=587
       - globalSettings__mail__smtp__ssl=false
@@ -177,6 +177,8 @@ services:
       - globalSettings__mail__smtp__trustServer=true
       - globalSettings__mail__smtp__username=no-reply@polyrics.dev
       - globalSettings__mail__smtp__password=${BW_EMAIL_PASS}
+      - Logging__Console__LogLevel__Default=Information
+      - Logging__Console__LogLevel__Bitwarden=Debug
     labels:
       - traefik.enable=true
       - traefik.http.routers.bitwarden.rule=Host(`bitwarden.${BASE_DOMAIN}`)
