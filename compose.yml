@@ -170,7 +170,7 @@ services:
       - BW_INSTALLATION_ID=${BW_INSTALLATION_ID}
       - BW_INSTALLATION_KEY=${BW_INSTALLATION_KEY}
       - globalSettings__mail__replyToEmail=no-reply@polyrics.dev
-      - globalSettings__mail__smtp__host=mailserver
+      - globalSettings__mail__smtp__host=mail.${BASE_DOMAIN}
       - globalSettings__mail__smtp__port=587
       - globalSettings__mail__smtp__ssl=false
       - globalSettings__mail__smtp__startTls=true
