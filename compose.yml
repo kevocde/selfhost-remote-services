@@ -19,9 +19,6 @@ services:
       - traefik:/letsencrypt
       - /var/run/docker.sock:/var/run/docker.sock:ro
 
-  # Placeholder router ONLY to make Traefik issue a Let's Encrypt cert for
-  # mail.<BASE_DOMAIN> (docker-mailserver reads it from acme.json). No real
-  # traffic is expected here.
   mailcert:
     image: traefik/whoami
     restart: always
@@ -33,28 +30,24 @@ services:
       - traefik.http.routers.mailcert.tls.certresolver=mytlschallenge
       - traefik.http.services.mailcert.loadbalancer.server.port=80
 
-  # docker-mailserver (SMTP relay for AppFlowy). Env config is tracked in services/mailserver-config/mailserver.env.
   mailserver:
     image: ghcr.io/docker-mailserver/docker-mailserver:latest
     container_name: mailserver
-    # NOTE: Replace `mail.${BASE_DOMAIN}` value via BASE_DOMAIN in .env once set.
     hostname: mail.${BASE_DOMAIN}
     env_file:
       - ./services/mailserver-config/mailserver.env
     depends_on:
       - traefik
     ports:
-      - "25:25"    # SMTP  (explicit TLS => STARTTLS, Authentication is DISABLED => use port 465/587 instead)
-      - "465:465"  # ESMTP (implicit TLS)
-      - "587:587"  # ESMTP (explicit TLS => STARTTLS)
+      - "25:25"
+      - "465:465"
+      - "587:587"
     volumes:
       - ./docker/mailserver/docker-data/dms/mail-data/:/var/mail/
       - ./docker/mailserver/docker-data/dms/mail-state/:/var/mail-state/
       - ./docker/mailserver/docker-data/dms/mail-logs/:/var/log/mail/
       - ./docker/mailserver/docker-data/dms/config/:/tmp/docker-mailserver/
       - /etc/localtime:/etc/localtime:ro
-      # Traefik ACME store -> TLS cert for SMTP (docker-mailserver reads acme.json natively
-      # and writes extracted PEMs to /etc/letsencrypt/live/, so the mount must be writable).
       - traefik:/etc/letsencrypt
     restart: always
     stop_grace_period: 1m
@@ -155,113 +148,30 @@ services:
     volumes:
       - evolution:/evolution/instances
 
-  bitwarden:
-    image: ghcr.io/bitwarden/lite
+  vault:
+    image: vaultwarden/server:latest
     restart: unless-stopped
-    volumes:
-      - bitwarden:/etc/bitwarden
     environment:
-      - BW_DB_PROVIDER=${BW_DB_PROVIDER}
-      - BW_DB_SERVER=${BW_DB_SERVER}
-      - BW_DB_DATABASE=${BW_DB_DATABASE}
-      - BW_DB_USERNAME=${BW_DB_USERNAME}
-      - BW_DB_PASSWORD=${BW_DB_PASSWORD}
-      - BW_DOMAIN=${BW_DOMAIN}
-      - BW_INSTALLATION_ID=${BW_INSTALLATION_ID}
-      - BW_INSTALLATION_KEY=${BW_INSTALLATION_KEY}
-      - globalSettings__mail__replyToEmail=no-reply.bitwardencat@polyrics.dev
-      - globalSettings__mail__smtp__host=mailserver
-      - globalSettings__mail__smtp__port=587
-      - globalSettings__mail__smtp__ssl=false
-      - globalSettings__mail__smtp__startTls=false
-      - globalSettings__mail__smtp__trustServer=true
-      - globalSettings__mail__smtp__username=no-reply@polyrics.dev
-      - globalSettings__mail__smtp__password=${BW_EMAIL_PASS}
-      - Logging__Console__LogLevel__Default=Information
-      - Logging__Console__LogLevel__Bitwarden=Debug
+      DOMAIN: "https://vault.${BASE_DOMAIN}"
+      SIGNUPS_ALLOWED: "true"
+    volumes:
+      - vault:/data/
     labels:
       - traefik.enable=true
-      - traefik.http.routers.bitwarden.rule=Host(`bitwarden.${BASE_DOMAIN}`)
-      - traefik.http.routers.bitwarden.tls=true
-      - traefik.http.routers.bitwarden.entrypoints=web,websecure
-      - traefik.http.routers.bitwarden.tls.certresolver=mytlschallenge
-      - traefik.http.services.bitwarden.loadbalancer.server.port=8080
-      - traefik.http.middlewares.bitwarden.headers.SSLRedirect=true
-      - traefik.http.middlewares.bitwarden.headers.STSSeconds=315360000
-      - traefik.http.middlewares.bitwarden.headers.browserXSSFilter=true
-      - traefik.http.middlewares.bitwarden.headers.contentTypeNosniff=true
-      - traefik.http.middlewares.bitwarden.headers.forceSTSHeader=true
-      - traefik.http.middlewares.bitwarden.headers.SSLHost=${BASE_DOMAIN}
-      - traefik.http.middlewares.bitwarden.headers.STSIncludeSubdomains=true
-      - traefik.http.middlewares.bitwarden.headers.STSPreload=true
-      - traefik.http.routers.bitwarden.middlewares=bitwarden@docker
+      - traefik.http.routers.vault.rule=Host(`vault.${BASE_DOMAIN}`)
+      - traefik.http.routers.vault.entrypoints=websecure
+      - traefik.http.routers.vault.tls=true
+      - traefik.http.routers.vault.tls.certresolver=mytlschallenge
+      - traefik.http.services.vault.loadbalancer.server.port=80
+      - traefik.http.middlewares.vault.headers.STSSeconds=315360000
+      - traefik.http.middlewares.vault.headers.browserXSSFilter=true
+      - traefik.http.middlewares.vault.headers.contentTypeNosniff=true
+      - traefik.http.middlewares.vault.headers.forceSTSHeader=true
+      - traefik.http.middlewares.vault.headers.STSIncludeSubdomains=true
+      - traefik.http.middlewares.vault.headers.STSPreload=true
+      - traefik.http.routers.vault.middlewares=vault@docker
     depends_on:
-      - mariadb
       - traefik
-
-  wordpress:
-    image: wordpress:latest
-    restart: unless-stopped
-    volumes:
-      - ./docker/wordpress/wp-content:/var/www/html/wp-content
-    environment:
-      - WORDPRESS_DB_NAME=${WORDPRESS_DB_NAME}
-      - WORDPRESS_TABLE_PREFIX=wp_
-      - WORDPRESS_DB_HOST=mariadb
-      - WORDPRESS_DB_USER=${WORDPRESS_DB_USER}
-      - WORDPRESS_DB_PASSWORD=${WORDPRESS_DB_PASS}
-    labels:
-      - traefik.enable=true
-      - traefik.http.routers.wordpress.rule=Host(`blog.${BASE_DOMAIN}`)
-      - traefik.http.routers.wordpress.tls=true
-      - traefik.http.routers.wordpress.entrypoints=web,websecure
-      - traefik.http.routers.wordpress.tls.certresolver=mytlschallenge
-      - traefik.http.services.wordpress.loadbalancer.server.port=80
-      - traefik.http.middlewares.wordpress.headers.SSLRedirect=true
-      - traefik.http.middlewares.wordpress.headers.STSSeconds=315360000
-      - traefik.http.middlewares.wordpress.headers.browserXSSFilter=true
-      - traefik.http.middlewares.wordpress.headers.contentTypeNosniff=true
-      - traefik.http.middlewares.wordpress.headers.forceSTSHeader=true
-      - traefik.http.middlewares.wordpress.headers.SSLHost=${BASE_DOMAIN}
-      - traefik.http.middlewares.wordpress.headers.STSIncludeSubdomains=true
-      - traefik.http.middlewares.wordpress.headers.STSPreload=true
-      - traefik.http.routers.wordpress.middlewares=wordpress@docker
-    depends_on:
-      - mariadb
-
-  mariadb:
-    image: mariadb:latest
-    restart: unless-stopped
-    volumes:
-      - mariadb:/var/lib/mysql
-      - ./services/mysql:/docker-entrypoint-initdb.d
-    environment:
-      - MYSQL_ROOT_PASSWORD=${WORDPRESS_DB_PASS}
-      - MYSQL_USER=${WORDPRESS_DB_USER}
-      - MYSQL_PASSWORD=${WORDPRESS_DB_PASS}
-      - MYSQL_DATABASE=${WORDPRESS_DB_NAME}
-
-  billuyo:
-    build:
-      context: ./services/billuyo
-      dockerfile: Dockerfile
-    restart: unless-stopped
-    labels:
-      - traefik.enable=true
-      - traefik.http.routers.billuyo.rule=Host(`billuyo.${BASE_DOMAIN}`)
-      - traefik.http.routers.billuyo.tls=true
-      - traefik.http.routers.billuyo.entrypoints=web,websecure
-      - traefik.http.routers.billuyo.tls.certresolver=mytlschallenge
-      - traefik.http.services.billuyo.loadbalancer.server.port=80
-      - traefik.http.middlewares.billuyo.headers.SSLRedirect=true
-      - traefik.http.middlewares.billuyo.headers.STSSeconds=315360000
-      - traefik.http.middlewares.billuyo.headers.browserXSSFilter=true
-      - traefik.http.middlewares.billuyo.headers.contentTypeNosniff=true
-      - traefik.http.middlewares.billuyo.headers.forceSTSHeader=true
-      - traefik.http.middlewares.billuyo.headers.SSLHost=${BASE_DOMAIN}
-      - traefik.http.middlewares.billuyo.headers.STSIncludeSubdomains=true
-      - traefik.http.middlewares.billuyo.headers.STSPreload=true
-      - traefik.http.routers.billuyo.middlewares=billuyo@docker
 
   appflowy_nginx:
     restart: unless-stopped
@@ -459,8 +369,7 @@ volumes:
   db:
   n8n:
   evolution:
-  mariadb:
-  bitwarden:
+  vault:
   appflowy_postgres_data:
   appflowy_minio_data:
   appflowy_keyword_index_data:
