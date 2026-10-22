@@ -264,7 +264,7 @@ services:
       - traefik.http.routers.billuyo.middlewares=billuyo@docker
 
   appflowy_nginx:
-    restart: on-failure
+    restart: unless-stopped
     image: nginx
     volumes:
       - ./services/appflowy/nginx.conf:/etc/nginx/nginx.conf:ro
@@ -304,7 +304,7 @@ services:
       - appflowy_minio_data:/data
 
   appflowy_postgres:
-    restart: on-failure
+    restart: unless-stopped
     image: pgvector/pgvector:pg16
     env_file:
       - ./services/appflowy/.env
